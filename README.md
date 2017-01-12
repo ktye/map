@@ -22,5 +22,7 @@ Map should become a cartography infrastructure for [go](https://www.golang.org).
 - [ ] .osm.pbf -> extract -> render -> tile server pipeline
 - A long way to go
 
+![](http://www.walter-kuhl.de/grafik_f/mfundeg/01_messpunkt6759.jpg)
+
 # BUGS
 - Go has still too many keywords. The package cannot be called `map`.
