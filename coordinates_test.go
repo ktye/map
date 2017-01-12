@@ -1,13 +1,16 @@
 package maps
 
 import (
+	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"testing"
+	"text/tabwriter"
 )
 
 func TestDegXY(t *testing.T) {
-	for z := 0; z < 20; z++ {
+	for z := 0; z <= 24; z++ {
 		for i := 0; i < 100; i++ {
 			deg := Deg{
 				2*MaxLat*rand.Float64() - MaxLat,
@@ -20,6 +23,10 @@ func TestDegXY(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestXY(t *testing.T) {
+
 }
 
 func TestDistance(t *testing.T) {
@@ -53,12 +60,20 @@ func TestDistance(t *testing.T) {
 
 func TestPixelSize(t *testing.T) {
 	l := 2 * math.Pi * EarthRadius / 256
-	for z := 0; z < 20; z++ {
+	var horizontalPixels uint64 = 256
+	var buf bytes.Buffer
+	tab := tabwriter.NewWriter(&buf, 0, 8, 2, ' ', 0)
+	fmt.Fprintf(tab, "Z\tHor. Pixels\tPixelSize\n")
+	for z := 0; z <= 24; z++ {
 		xy := Deg{0, 0}.XY(z)
 		s := xy.PixelSize()
+		fmt.Fprintf(tab, "%d\t%d\t%v\n", z, horizontalPixels, s)
 		if e := math.Abs(float64(l - s)); e > 1E-6 {
 			t.Errorf("wrong PixelSize for zoom level %d. Got: %s instead of %s", z, s, l)
 		}
 		l /= 2
+		horizontalPixels *= 2
 	}
+	tab.Flush()
+	// fmt.Println(string(buf.Bytes())) // Create table for PixelSize documentation.
 }

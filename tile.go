@@ -18,10 +18,12 @@ import (
 
 // Tile is a 256x256 part of a map as an image in web Mercator projection (EPSG:3857).
 //
-// Zoom levels: 0-18
+// Zoom levels: 0-24
 //	0: single tile of hole world
 //	z: 2^z times 2^z tiles
-//	18: 274 877 906 944 tiles
+//	16: should be good enough for not getting lost
+//	19: max zoom level of tile.openstreetmap.org, some servers offer less.
+//	24: full resolution if the data is stored as 2x32bit integer
 // X coordinate:
 //	from 0 (left edge 180 deg W) to 2^z - 1 (right edge is 180 E)
 // Y coordinate:
