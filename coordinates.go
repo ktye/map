@@ -1,34 +1,55 @@
 package maps
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 )
 
-// Deg defines a point as degrees (EPSG:4326).
-type Deg struct {
-	Lat float64 // Latitude (lines connecting the poles): [-85.0511, 85.0511]
-	Lon float64 // Longitude (lines around the equator and parallel to it): [-180, 180]
+// Degree is a unit for angles.
+// It represent distinct values in the range [-180, 180).
+type Degree float64
+
+// String prints a degree value with the "°" suffix.
+func (d Degree) String() string {
+	return strconv.FormatFloat(float64(d), 'f', -1, 64) + "°"
 }
 
-const MaxLat float64 = 85.0511
+// Radians converts a Degree value to radians [-pi, pi].
+func (d Degree) Radians() float64 {
+	return float64(d) / 180 * math.Pi
+}
+
+// LatLon defines a point by the spherical angles Lat and Lon given in degree (EPSG:4326).
+// Changing the lateral coordinate from -90 to 90 is equivalent from a point moving from the South to the North pole.
+// The longitudinal coordinate is 0 at the Greenwich meridian and increases by moving East.
+type LatLon struct {
+	Lat Degree // Latitude (lines connecting the poles) "[-90, 90]"
+	Lon Degree // Longitude (lines around the equator and parallel to it): "[-180, 180]"
+}
 
 // XY converts d to XY for the given zoom level [0, 24].
-func (d Deg) XY(z int) XY {
-	checkZoom(z)
-	x := (d.Lon + 180) / 360 * (math.Exp2(float64(z)))
-	y := (1 - math.Log(math.Tan(d.Lat*math.Pi/180)+1/math.Cos(d.Lat*math.Pi/180))/math.Pi) / 2 * (math.Exp2(float64(z)))
+func (d LatLon) XY(z int) (XY, error) {
+	if z < 0 || z > 24 {
+		return XY{}, ZoomRangeError
+	}
+	if d.Lat < MinLatitude(z) || d.Lat > MaxLatitude {
+		return XY{}, fmt.Errorf("latitude %s value cannot be represented by tile coordinates", d.Lat)
+	}
+	x := (float64(d.Lon) + 180) / 360 * float64(uint(1)<<uint(z))
+	y := (1 - math.Log(math.Tan(d.Lat.Radians())+1/math.Cos(d.Lat.Radians()))/math.Pi) /
+		2 * (float64(uint(1) << uint(z)))
 	return XY{
 		X:  int(x),
 		Y:  int(y),
 		Z:  z,
 		XP: int(256 * (x - float64(int(x)))),
 		YP: int(256 * (y - float64(int(y)))),
-	}
+	}, nil
 }
 
-func (d Deg) String() string {
+func (d LatLon) String() string {
 	return fmt.Sprintf("%v°,%v°", d.Lat, d.Lon)
 }
 
@@ -52,10 +73,9 @@ func (m Meter) Kilometer() string {
 // The great circle distance, is the minimal path length between these points on a sphere
 // with the nominal earth radius, for a path which is contraint to the sphere's surface.
 // The calculation is done using the Vincenty formula.
-func (d1 Deg) Distance(d2 Deg) Meter {
-	radians := func(deg float64) float64 { return deg / 180 * math.Pi }
-	lat1, lon1 := radians(d1.Lat), radians(d1.Lon)
-	lat2, lon2 := radians(d2.Lat), radians(d2.Lon)
+func (d1 LatLon) Distance(d2 LatLon) Meter {
+	lat1, lon1 := d1.Lat.Radians(), d1.Lon.Radians()
+	lat2, lon2 := d2.Lat.Radians(), d2.Lon.Radians()
 	dLon := math.Abs(lon2 - lon1)
 
 	// Vincenty formula.
@@ -65,46 +85,36 @@ func (d1 Deg) Distance(d2 Deg) Meter {
 }
 
 // XY defines the tile coordinates with a zoom index [0,24].
+// The tile coordinate system does not have the same range as the spherical degrees.
+// Points north of MaxLatitude or south of MinLatitude(zoomLevel) cannot be represented.
+// The longitudinal limits for the representable values are -180° to 179.99999991618097° for Z = 24
+// and 178.59375° for Z = 0.
 type XY struct {
-	X, Y   int // Tile index.
-	XP, YP int // Pixel offset to top left corner.
-	Z      int // Zoom index.
+	X, Y   int // Tile index [0, 2^Z].
+	XP, YP int // Pixel offset to top left corner within the tile [0, 255].
+	Z      int // Zoom index [0, 24].
+}
+
+// MaxLatitude is the maximal latitude, that a tile coordinate can represent
+const MaxLatitude Degree = 85.05112877980659
+
+// MinLatitude returns the minimal latitude, that a tile coordinate can represent
+// for the given zoom level.
+// The value is -85.0511287725758° for full resolution (z=24)
+// and -84.92832092949963° for z = 0.
+func MinLatitude(z int) Degree {
+	checkZoom(z)
+	return XY{X: (1 << uint(z)) - 1, Y: (1 << uint(z)) - 1, Z: z, XP: 255, YP: 255}.LatLon().Lat
 }
 
 // PixelSize calculates the edge length of a single pixel at XY in meters.
 // It uses the mean earth Radius instead of the equator length for the calculation.
-// 	Z   Hor. Pixels  PixelSize
-// 	0   256          156368.08157840566m
-// 	1   512          78184.04078920283m
-// 	2   1024         39092.020394601415m
-// 	3   2048         19546.010197300708m
-// 	4   4096         9773.005098650354m
-// 	5   8192         4886.502549325177m
-// 	6   16384        2443.2512746625885m
-// 	7   32768        1221.6256373312942m
-// 	8   65536        610.8128186656471m
-// 	9   131072       305.40640933282356m
-// 	10  262144       152.70320466641178m
-// 	11  524288       76.35160233320589m
-// 	12  1048576      38.175801166602945m
-// 	13  2097152      19.087900583301472m
-// 	14  4194304      9.543950291650736m
-// 	15  8388608      4.771975145825368m
-// 	16  16777216     2.385987572912684m
-// 	17  33554432     1.192993786456342m
-// 	18  67108864     0.596496893228171m
-// 	19  134217728    0.2982484466140855m
-// 	20  268435456    0.14912422330704275m
-// 	21  536870912    0.07456211165352138m
-// 	22  1073741824   0.03728105582676069m
-// 	23  2147483648   0.018640527913380344m
-// 	24  4294967296   0.009320263956690172m
 func (xy XY) PixelSize() Meter {
 	// 2 * pi * R    pi * R     |
 	// ---------- =  -------    | reduced by factor cos(lat)
 	// 256 * 2^z     2^(7+z)    |
-	deg := xy.Deg()
-	coslat := math.Cos(deg.Lat / 180 * math.Pi)
+	deg := xy.LatLon()
+	coslat := math.Cos(deg.Lat.Radians())
 	// This does not overflow for max zoom = 24.
 	checkZoom(xy.Z)
 	return EarthRadius * Meter(math.Pi*coslat/float64(uint(1<<uint(7+xy.Z))))
@@ -114,17 +124,19 @@ func (xy XY) String() string {
 	return fmt.Sprintf("%d/%d/%d.png:%d,%d", xy.Z, xy.X, xy.Y, xy.XP, xy.YP)
 }
 
-// Deg converts xy to Deg for the given zoom level.
-func (xy XY) Deg() Deg {
+// Deg converts xy to LatLon for the given zoom level.
+func (xy XY) LatLon() LatLon {
 	checkZoom(xy.Z)
 	x := float64(xy.X) + float64(xy.XP)/256
 	y := float64(xy.Y) + float64(xy.YP)/256
-	n := math.Pi - 2*math.Pi*y/math.Exp2(float64(xy.Z))
-	return Deg{
-		Lat: 180.0 / math.Pi * math.Atan(0.5*(math.Exp(n)-math.Exp(-n))),
-		Lon: x/math.Exp2(float64(xy.Z))*360 - 180,
+	n := math.Pi - 2*math.Pi*y/float64(uint(1)<<uint(xy.Z))
+	return LatLon{
+		Lat: Degree(180.0 / math.Pi * math.Atan(0.5*(math.Exp(n)-math.Exp(-n)))),
+		Lon: Degree(x/float64(uint(1)<<uint(xy.Z))*360 - 180),
 	}
 }
+
+var ZoomRangeError = errors.New("zoom value is out of range [0, 24]")
 
 // checkZoom panics, if the zoom value is out of range.
 func checkZoom(z int) {

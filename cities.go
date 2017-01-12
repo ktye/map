@@ -6,7 +6,7 @@ package maps
 // https://www.maxmind.com/en/free-world-cities-database
 // License: http://download.maxmind.com/download/geoip/database/LICENSE_WC.txt
 // "This product includes data created by MaxMind, available from http://www.maxmind.com/"
-var Cities = map[string]Deg{
+var Cities = map[string]LatLon{
 	"abidjan":             {5.309657, -4.012656},
 	"accra":               {5.55, -0.2166667},
 	"adana":               {37.001667, 35.328889},
