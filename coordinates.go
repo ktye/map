@@ -37,9 +37,8 @@ func (d LatLon) XY(z int) (XY, error) {
 	if d.Lat < MinLatitude(z) || d.Lat > MaxLatitude {
 		return XY{}, fmt.Errorf("latitude %s value cannot be represented by tile coordinates", d.Lat)
 	}
-	x := (float64(d.Lon) + 180) / 360 * float64(uint(1)<<uint(z))
-	y := (1 - math.Log(math.Tan(d.Lat.Radians())+1/math.Cos(d.Lat.Radians()))/math.Pi) /
-		2 * (float64(uint(1) << uint(z)))
+	x := (float64(d.Lon) + 180) / 360 * two[z]
+	y := (1 - math.Log(math.Tan(d.Lat.Radians())+1/math.Cos(d.Lat.Radians()))/math.Pi) / 2 * two[z]
 	return XY{
 		X:  int(x),
 		Y:  int(y),
@@ -117,7 +116,7 @@ func (xy XY) PixelSize() Meter {
 	coslat := math.Cos(deg.Lat.Radians())
 	// This does not overflow for max zoom = 24.
 	checkZoom(xy.Z)
-	return EarthRadius * Meter(math.Pi*coslat/float64(uint(1<<uint(7+xy.Z))))
+	return EarthRadius * Meter(math.Pi*coslat/float64(uint(1)<<uint(7+xy.Z)))
 }
 
 func (xy XY) String() string {
@@ -126,13 +125,12 @@ func (xy XY) String() string {
 
 // Deg converts xy to LatLon for the given zoom level.
 func (xy XY) LatLon() LatLon {
-	checkZoom(xy.Z)
 	x := float64(xy.X) + float64(xy.XP)/256
 	y := float64(xy.Y) + float64(xy.YP)/256
-	n := math.Pi - 2*math.Pi*y/float64(uint(1)<<uint(xy.Z))
+	n := math.Pi - 2*math.Pi*y/two[xy.Z]
 	return LatLon{
 		Lat: Degree(180.0 / math.Pi * math.Atan(0.5*(math.Exp(n)-math.Exp(-n)))),
-		Lon: Degree(x/float64(uint(1)<<uint(xy.Z))*360 - 180),
+		Lon: Degree(x/two[xy.Z]*360 - 180),
 	}
 }
 
@@ -142,5 +140,14 @@ var ZoomRangeError = errors.New("zoom value is out of range [0, 24]")
 func checkZoom(z int) {
 	if z < 0 || z > 24 {
 		panic("zoom value is out of range [0, 24]")
+	}
+}
+
+// Two stores the numbers 2^z for the zoom levels 0..24.
+var two [25]float64
+
+func init() {
+	for i := 0; i < len(two); i++ {
+		two[i] = float64(uint(1) << uint(i))
 	}
 }
