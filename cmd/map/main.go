@@ -5,6 +5,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"image"
 	"image/draw"
 	"log"
@@ -38,7 +39,7 @@ func main() {
 	flag.IntVar(&cache, "cache", 10000, "max number of cached files, set to -1 to disable completely")
 	flag.StringVar(&local, "local", "", "directory of local file server, disabled by default")
 	flag.StringVar(&url, "url", "", "URL of a http tile server")
-	flag.IntVar(&Zoom, "zoom", 8, "zoom level [0..24]")
+	flag.IntVar(&Zoom, "zoom", 0, "zoom level [0..24]")
 	flag.Parse()
 
 	if Zoom < 0 || Zoom > 24 {
@@ -97,6 +98,7 @@ func main() {
 				// ScrollWheel: zoom in/out.
 				// Keep the location of the point under the cursor.
 				if e.Button == mouse.ButtonWheelUp || e.Button == mouse.ButtonWheelDown {
+					fmt.Printf("mouse.Event: %+v\n", e)
 					if e.Button == mouse.ButtonWheelUp && Zoom < 24 {
 						Zoom++
 						Origin = Origin.Mul(2)
