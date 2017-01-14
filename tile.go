@@ -8,7 +8,9 @@ import (
 	"image/draw"
 	"image/png"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,26 +36,43 @@ import (
 // https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 type Tile image.Image
 
+// NumTiles returns the number of tiles per direction for the given zoom value.
+// It returns 2^z for z values in the allowed range [0, 24] and 0 otherwise.
+func NumTiles(z int) int {
+	if z < 0 || z > 24 {
+		return 0
+	}
+	return int(1 << uint(z))
+}
+
 // A TileServer can return a Tile.
 //
 // Example:
 //	tileServer := CombinedTileServer{
 //		CacheTileServer: NewCacheTileServer(10000),
 //		LocalTileServer: "path/to/static/tiles",
-//		HttpTileServer: "http://a.tile.openstreetmap.org",
+//		HttpTileServer: "http://a.tileserver.mymap.com",
 //	}
 type TileServer interface {
 	Get(z, x, y int) (Tile, error)
 }
 
 // HttpTileServer is a TileServer which requests tiles from a URL.
-// It's value is the server base URL, e.g: "http://a.tile.openstreetmap.org"
-// E.g.: "http://a.tile.openstreetmap.org".
+// It's value is the server base URL, e.g: "http://a.tileserver.mymap.com".
 type HttpTileServer string
 
 // Get returns the tile from HttpTileServer/z/x/y.png
 func (s HttpTileServer) Get(z, x, y int) (Tile, error) {
-	url := path.Join(string(s), strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y)+".png")
+	x, y = normalizeTile(z, x, y)
+
+	u, err := url.Parse(string(s))
+	if err != nil {
+		return nil, err
+	}
+	u.Path = path.Join(u.Path, strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y)+".png")
+	url := u.String()
+
+	log.Print("GET ", url)
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -73,6 +92,7 @@ type LocalTileServer string
 
 // Get returns the tile from disk from the path LocalTile/z/x/y.png
 func (l LocalTileServer) Get(z, x, y int) (Tile, error) {
+	x, y = normalizeTile(z, x, y)
 	file := filepath.Join(string(l), strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y)+".png")
 	if r, err := os.Open(file); err != nil {
 		return nil, err
@@ -85,6 +105,7 @@ func (l LocalTileServer) Get(z, x, y int) (Tile, error) {
 // Add writes the tile to disk.
 // It overwrites any existing file.
 func (l LocalTileServer) Add(z, x, y int, t Tile) error {
+	x, y = normalizeTile(z, x, y)
 	if string(l) == "" {
 		return errors.New("the local tile server path is unset")
 	}
@@ -123,6 +144,7 @@ type CacheTileServer struct {
 
 // Get returns a tile from the cache.
 func (c *CacheTileServer) Get(z, x, y int) (Tile, error) {
+	x, y = normalizeTile(z, x, y)
 	c.Lock()
 	defer c.Unlock()
 	if t, ok := c.m[[3]int{z, x, y}]; !ok {
@@ -135,6 +157,7 @@ func (c *CacheTileServer) Get(z, x, y int) (Tile, error) {
 // Add adds a tile to the cache.
 // It returns immediately, if the CacheTileServer is not enabled.
 func (c *CacheTileServer) Add(z, x, y int, t Tile) {
+	x, y = normalizeTile(z, x, y)
 	if c.m == nil {
 		return
 	}
@@ -162,6 +185,7 @@ type UniformTileServer struct {
 
 // Get returns the color of u.
 func (u *UniformTileServer) Get(z, x, y int) (Tile, error) {
+	x, y = normalizeTile(z, x, y)
 	if u.im == nil {
 		u.im = image.NewRGBA(image.Rect(0, 0, 256, 256))
 		draw.Draw(u.im, u.im.Bounds(), &image.Uniform{u.Color}, image.ZP, draw.Src)
@@ -185,6 +209,7 @@ type CombinedTileServer struct {
 // if these are configured.
 // Get never returns an error, if no tiles are present, it returns a black tile instead.
 func (c CombinedTileServer) Get(z, x, y int) (Tile, error) {
+	x, y = normalizeTile(z, x, y)
 	if c.Cache.m != nil {
 		if t, err := c.Cache.Get(z, x, y); err == nil {
 			return t, nil
@@ -207,7 +232,27 @@ func (c CombinedTileServer) Get(z, x, y int) (Tile, error) {
 				c.Cache.Add(z, x, y, t)
 			}
 			return t, nil
+		} else {
+			log.Print(err)
 		}
 	}
 	return BlackTileServer.Get(z, x, y)
+}
+
+// normalizeTile wraps tile coordinates around, if the x or y coordinates
+// are out of range.
+// Wrapping the x coordinate seems natural, as the definition of 0 is arbitrary.
+// Instead of wrapping the y coordinate, an invalid (or black) tile could be send.
+func normalizeTile(z, x, y int) (X, Y int) {
+	checkZoom(z)
+	m := NumTiles(z)
+	x %= m
+	y %= m
+	if x < 0 {
+		x += m
+	}
+	if y < 0 {
+		y += m
+	}
+	return x, y
 }
