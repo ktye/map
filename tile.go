@@ -196,11 +196,53 @@ func (u *UniformTileServer) Get(z, x, y int) (Tile, error) {
 // BlackTileServer always returns a black tile.
 var BlackTileServer = UniformTileServer{Color: color.Black}
 
+// A PointTileServer renders coordinates as points on a transparent background.
+type PointTileServer struct {
+	Color  color.Color
+	File   string
+	coords []LatLon
+}
+
+func NewPointTileServer(file string, c color.Color) (*PointTileServer) {
+	var p PointTileServer
+	if c == nil {
+		c = color.Black
+	}
+	p.Color = c
+	if f, err := os.Open(file); err != nil {
+		panic(err)
+	} else {
+		defer f.Close()
+		var lat, lon float64
+		for {
+			if n, err := fmt.Fscanf(f, "%f %f\n", &lat, &lon); n == 2 && err == nil {
+				p.coords = append(p.coords, LatLon{Degree(lat), Degree(lon)})
+			} else {
+				break
+			}
+		}
+	}
+	return &p
+}
+
+func (p *PointTileServer) Get(z, x, y int) (Tile, error) {
+	im := image.NewAlpha(image.Rect(0, 0, 256, 256))
+	for _, c := range p.coords {
+		if xy, err := c.XY(z); err != nil {
+			if xy.X == x && xy.Y == y {
+				im.Set(xy.XP, xy.YP, color.Opaque)
+			}
+		}
+	}
+	return Tile(im), nil
+}
+
 // CombinedTileServer combines an CachedTileServer a LocalTileServer and an HttpTileServer.
 type CombinedTileServer struct {
-	Cache *CacheTileServer
-	Local LocalTileServer
-	Http  HttpTileServer
+	Points *PointTileServer
+	Cache  *CacheTileServer
+	Local  LocalTileServer
+	Http   HttpTileServer
 }
 
 // Get returns a tile from the cache, the local filestystem or the net in that order.
@@ -209,6 +251,25 @@ type CombinedTileServer struct {
 // if these are configured.
 // Get never returns an error, if no tiles are present, it returns a black tile instead.
 func (c CombinedTileServer) Get(z, x, y int) (Tile, error) {
+	t, err := c.get(z, x, y)
+	if err != nil {
+		return t, err
+	}
+	if c.Points == nil {
+		return t, nil
+	}
+
+	im := t.(draw.Image)
+	for _, coords := range c.Points.coords {
+		if xy, err := coords.XY(z); err == nil {
+			if xy.X == x && xy.Y == y {
+				im.Set(xy.XP, xy.YP, c.Points.Color)
+			}
+		}
+	}
+	return Tile(im), nil
+}
+func (c CombinedTileServer) get(z, x, y int) (Tile, error) {
 	x, y = normalizeTile(z, x, y)
 	if c.Cache.m != nil {
 		if t, err := c.Cache.Get(z, x, y); err == nil {

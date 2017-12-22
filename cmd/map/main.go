@@ -5,8 +5,8 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"log"
 	"sync"
@@ -35,11 +35,12 @@ var tileServer maps.TileServer
 func main() {
 	// Process command line arguments.
 	var cache int
-	var local, url string
+	var local, url, points string
 	flag.IntVar(&cache, "cache", 10000, "max number of cached files, set to -1 to disable completely")
 	flag.StringVar(&local, "local", "", "directory of local file server, disabled by default")
 	flag.StringVar(&url, "url", "", "URL of a http tile server")
 	flag.IntVar(&Zoom, "zoom", 0, "zoom level [0..24]")
+	flag.StringVar(&points, "points", "points.dat", "file name of points file")
 	flag.Parse()
 
 	if Zoom < 0 || Zoom > 24 {
@@ -51,6 +52,7 @@ func main() {
 		tileServer = maps.Mandelbrot{}
 	} else {
 		tileServer = maps.CombinedTileServer{
+			Points: maps.NewPointTileServer(points, color.RGBA{0,255,0,255}),
 			Cache: maps.NewCacheTileServer(cache),
 			Local: maps.LocalTileServer(local),
 			Http:  maps.HttpTileServer(url),
@@ -98,7 +100,6 @@ func main() {
 				// ScrollWheel: zoom in/out.
 				// Keep the location of the point under the cursor.
 				if e.Button == mouse.ButtonWheelUp || e.Button == mouse.ButtonWheelDown {
-					fmt.Printf("mouse.Event: %+v\n", e)
 					if e.Button == mouse.ButtonWheelUp && Zoom < 24 {
 						Zoom++
 						Origin = Origin.Mul(2)
