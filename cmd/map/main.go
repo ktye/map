@@ -1,6 +1,6 @@
 // Derived from golang.org/x/exp/shiny/examples/tile.
 
-// Program map shows a slippery map served by a TileServer in a shiny frontend.
+// Program map shows a slippery map served by a tile.Server in a shiny frontend.
 package main
 
 import (
@@ -30,7 +30,7 @@ var (
 
 var Origin = image.Point{}
 var Zoom int
-var tileServer tile.TileServer
+var tileServer tile.Server
 
 func main() {
 	// Process command line arguments.
@@ -51,11 +51,11 @@ func main() {
 	if url == "" && local == "" {
 		tileServer = tile.Mandelbrot{}
 	} else {
-		tileServer = tile.CombinedTileServer{
-			Points: tile.NewPointTileServer(points, color.RGBA{0, 255, 0, 255}),
-			Cache:  tile.NewCacheTileServer(cache),
-			Local:  tile.LocalTileServer(local),
-			Http:   tile.HttpTileServer(url),
+		tileServer = tile.CombinedServer{
+			Points: tile.NewPointServer(points, color.RGBA{0, 255, 0, 255}),
+			Cache:  tile.NewCacheServer(cache),
+			Local:  tile.LocalServer(local),
+			Http:   tile.HttpServer(url),
 		}
 	}
 

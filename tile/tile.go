@@ -36,33 +36,24 @@ import (
 // https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 type Tile image.Image
 
-// NumTiles returns the number of tiles per direction for the given zoom value.
-// It returns 2^z for z values in the allowed range [0, 24] and 0 otherwise.
-func NumTiles(z int) int {
-	if z < 0 || z > 24 {
-		return 0
-	}
-	return int(1 << uint(z))
-}
-
-// A TileServer can return a Tile.
+// Server can return a Tile.
 //
 // Example:
-//	tileServer := CombinedTileServer{
-//		CacheTileServer: NewCacheTileServer(10000),
-//		LocalTileServer: "path/to/static/tiles",
-//		HttpTileServer: "http://a.tileserver.mymap.com",
+//	tileServer := CombinedServer{
+//		CacheServer: NewCacheServer(10000),
+//		LocalServer: "path/to/static/tiles",
+//		HttpServer: "http://a.tileserver.mymap.com",
 //	}
-type TileServer interface {
+type Server interface {
 	Get(z, x, y int) (Tile, error)
 }
 
-// HttpTileServer is a TileServer which requests tiles from a URL.
+// HttpServer is a Server which requests tiles from a URL.
 // It's value is the server base URL, e.g: "http://a.tileserver.mymap.com".
-type HttpTileServer string
+type HttpServer string
 
-// Get returns the tile from HttpTileServer/z/x/y.png
-func (s HttpTileServer) Get(z, x, y int) (Tile, error) {
+// Get returns the tile from HttpServer/z/x/y.png
+func (s HttpServer) Get(z, x, y int) (Tile, error) {
 	x, y = normalizeTile(z, x, y)
 
 	u, err := url.Parse(string(s))
@@ -87,11 +78,11 @@ func (s HttpTileServer) Get(z, x, y int) (Tile, error) {
 	}
 }
 
-// LocalTileServer is the base directory for a static tile file system on disk.
-type LocalTileServer string
+// LocalServer is the base directory for a static tile file system on disk.
+type LocalServer string
 
 // Get returns the tile from disk from the path LocalTile/z/x/y.png
-func (l LocalTileServer) Get(z, x, y int) (Tile, error) {
+func (l LocalServer) Get(z, x, y int) (Tile, error) {
 	x, y = normalizeTile(z, x, y)
 	file := filepath.Join(string(l), strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y)+".png")
 	if r, err := os.Open(file); err != nil {
@@ -104,7 +95,7 @@ func (l LocalTileServer) Get(z, x, y int) (Tile, error) {
 
 // Add writes the tile to disk.
 // It overwrites any existing file.
-func (l LocalTileServer) Add(z, x, y int, t Tile) error {
+func (l LocalServer) Add(z, x, y int, t Tile) error {
 	x, y = normalizeTile(z, x, y)
 	if string(l) == "" {
 		return errors.New("the local tile server path is unset")
@@ -134,16 +125,16 @@ func decodePngTile(r io.Reader) (Tile, error) {
 	}
 }
 
-// CacheTileServer is an in-memory TileServer.
-// Use NewCacheTileServer to create and enable a CacheTileServer.
-type CacheTileServer struct {
+// CacheServer is an in-memory Server.
+// Use NewCacheServer to create and enable a CacheServer.
+type CacheServer struct {
 	maxTiles int // If this is non-zero, it does not store more tiles that this number.
 	m        map[[3]int]Tile
 	sync.Mutex
 }
 
 // Get returns a tile from the cache.
-func (c *CacheTileServer) Get(z, x, y int) (Tile, error) {
+func (c *CacheServer) Get(z, x, y int) (Tile, error) {
 	x, y = normalizeTile(z, x, y)
 	c.Lock()
 	defer c.Unlock()
@@ -155,8 +146,8 @@ func (c *CacheTileServer) Get(z, x, y int) (Tile, error) {
 }
 
 // Add adds a tile to the cache.
-// It returns immediately, if the CacheTileServer is not enabled.
-func (c *CacheTileServer) Add(z, x, y int, t Tile) {
+// It returns immediately, if the CacheServer is not enabled.
+func (c *CacheServer) Add(z, x, y int, t Tile) {
 	x, y = normalizeTile(z, x, y)
 	if c.m == nil {
 		return
@@ -168,23 +159,23 @@ func (c *CacheTileServer) Add(z, x, y int, t Tile) {
 	c.Unlock()
 }
 
-// NewCacheTileServer enables and returns a CacheTileServer.
+// NewCacheServer enables and returns a CacheServer.
 // Set maxTiles to 0 if there is no limit on the number of tiles to be cached.
-func NewCacheTileServer(maxTiles int) *CacheTileServer {
-	var c CacheTileServer
+func NewCacheServer(maxTiles int) *CacheServer {
+	var c CacheServer
 	c.m = make(map[[3]int]Tile)
 	c.maxTiles = maxTiles
 	return &c
 }
 
-// UniformTileServer returns tiles with a uniform color.
-type UniformTileServer struct {
+// UniformServer returns tiles with a uniform color.
+type UniformServer struct {
 	Color color.Color
 	im    *image.RGBA
 }
 
 // Get returns the color of u.
-func (u *UniformTileServer) Get(z, x, y int) (Tile, error) {
+func (u *UniformServer) Get(z, x, y int) (Tile, error) {
 	x, y = normalizeTile(z, x, y)
 	if u.im == nil {
 		u.im = image.NewRGBA(image.Rect(0, 0, 256, 256))
@@ -193,18 +184,15 @@ func (u *UniformTileServer) Get(z, x, y int) (Tile, error) {
 	return Tile(u.im), nil
 }
 
-// BlackTileServer always returns a black tile.
-var BlackTileServer = UniformTileServer{Color: color.Black}
-
-// A PointTileServer renders coordinates as points on a transparent background.
-type PointTileServer struct {
+// A PointServer renders coordinates as points on a transparent background.
+type PointServer struct {
 	Color  color.Color
 	File   string
 	coords []LatLon
 }
 
-func NewPointTileServer(file string, c color.Color) *PointTileServer {
-	var p PointTileServer
+func NewPointServer(file string, c color.Color) *PointServer {
+	var p PointServer
 	if c == nil {
 		c = color.Black
 	}
@@ -225,7 +213,7 @@ func NewPointTileServer(file string, c color.Color) *PointTileServer {
 	return &p
 }
 
-func (p *PointTileServer) Get(z, x, y int) (Tile, error) {
+func (p *PointServer) Get(z, x, y int) (Tile, error) {
 	im := image.NewAlpha(image.Rect(0, 0, 256, 256))
 	for _, c := range p.coords {
 		if xy, err := c.XY(z); err != nil {
@@ -237,12 +225,12 @@ func (p *PointTileServer) Get(z, x, y int) (Tile, error) {
 	return Tile(im), nil
 }
 
-// CombinedTileServer combines an CachedTileServer a LocalTileServer and an HttpTileServer.
-type CombinedTileServer struct {
-	Points *PointTileServer
-	Cache  *CacheTileServer
-	Local  LocalTileServer
-	Http   HttpTileServer
+// CombinedServer combines an CachedServer a LocalServer and an HttpServer.
+type CombinedServer struct {
+	Points *PointServer
+	Cache  *CacheServer
+	Local  LocalServer
+	Http   HttpServer
 }
 
 // Get returns a tile from the cache, the local filesystem or the net in that order.
@@ -250,7 +238,7 @@ type CombinedTileServer struct {
 // Any tiles retrieved are also cached in the local and the cache tile server,
 // if these are configured.
 // Get never returns an error, if no tiles are present, it returns a black tile instead.
-func (c CombinedTileServer) Get(z, x, y int) (Tile, error) {
+func (c CombinedServer) Get(z, x, y int) (Tile, error) {
 	t, err := c.get(z, x, y)
 	if err != nil {
 		return t, err
@@ -269,14 +257,14 @@ func (c CombinedTileServer) Get(z, x, y int) (Tile, error) {
 	}
 	return Tile(im), nil
 }
-func (c CombinedTileServer) get(z, x, y int) (Tile, error) {
+func (c CombinedServer) get(z, x, y int) (Tile, error) {
 	x, y = normalizeTile(z, x, y)
 	if c.Cache != nil && c.Cache.m != nil {
 		if t, err := c.Cache.Get(z, x, y); err == nil {
 			return t, nil
 		}
 	}
-	if c.Local != LocalTileServer("") {
+	if c.Local != LocalServer("") {
 		if t, err := c.Local.Get(z, x, y); err == nil {
 			if c.Cache != nil && c.Cache.m != nil {
 				c.Cache.Add(z, x, y, t)
@@ -284,9 +272,9 @@ func (c CombinedTileServer) get(z, x, y int) (Tile, error) {
 			return t, nil
 		}
 	}
-	if c.Http != HttpTileServer("") {
+	if c.Http != HttpServer("") {
 		if t, err := c.Http.Get(z, x, y); err == nil {
-			if c.Local != LocalTileServer("") {
+			if c.Local != LocalServer("") {
 				c.Local.Add(z, x, y, t)
 			}
 			if c.Cache != nil && c.Cache.m != nil {
@@ -297,7 +285,16 @@ func (c CombinedTileServer) get(z, x, y int) (Tile, error) {
 			log.Print(err)
 		}
 	}
-	return BlackTileServer.Get(z, x, y)
+	return black, nil
+}
+
+// NumTiles returns the number of tiles per direction for the given zoom value.
+// It returns 2^z for z values in the allowed range [0, 24] and 0 otherwise.
+func NumTiles(z int) int {
+	if z < 0 || z > 24 {
+		return 0
+	}
+	return int(1 << uint(z))
 }
 
 // normalizeTile wraps tile coordinates around, if the x or y coordinates
@@ -316,4 +313,12 @@ func normalizeTile(z, x, y int) (X, Y int) {
 		y += m
 	}
 	return x, y
+}
+
+var black Tile
+
+func init() {
+	im := image.NewRGBA(image.Rect(0, 0, 256, 256))
+	draw.Draw(im, im.Bounds(), &image.Uniform{color.Black}, image.ZP, draw.Src)
+	black = im
 }

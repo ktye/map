@@ -9,7 +9,7 @@ import (
 
 func TestOrux(t *testing.T) {
 
-	var ts tile.LocalTileServer = "test"
+	var ts tile.LocalServer = "test"
 	m := Map{
 		TopLeft:     tile.LatLon{53.58914, 9.99786},
 		BottomRight: tile.LatLon{53.57668, 10.01678},

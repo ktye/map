@@ -28,8 +28,8 @@ type Map struct {
 
 // Encode creates a directory with the given Name and writes 2 files to the directory:
 // The index file name.otrk2.xml and the database file OruxMapsImages.db.
-// The image data is retrieved from the TileServer.
-func (m Map) Encode(name string, ts tile.TileServer) error {
+// The image data is retrieved from the Server.
+func (m Map) Encode(name string, ts tile.Server) error {
 	// Refuse to write a file which is too big.
 	if n, err := m.Count(); err != nil {
 		return err
@@ -63,7 +63,7 @@ func (m Map) Encode(name string, ts tile.TileServer) error {
 
 // sqlitePipe creates the database file by writing commands to the
 // sqlite3 process on wc.
-func (m Map) sqlitePipe(wc io.WriteCloser, ts tile.TileServer) {
+func (m Map) sqlitePipe(wc io.WriteCloser, ts tile.Server) {
 	defer wc.Close()
 	wc.Write([]byte(sqlStart))
 	var buf bytes.Buffer
