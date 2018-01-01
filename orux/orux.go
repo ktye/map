@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/ktye/maps"
+	"github.com/ktye/maps/tile"
 )
 
 var tileLimit = int64(40) // Encode will complain if this limit is exceeded.
@@ -22,14 +22,14 @@ var tileLimit = int64(40) // Encode will complain if this limit is exceeded.
 // Map defines the rectangle of the map and the zoom levels to be stored.
 // The rectangle will be extended to the tile boundaries for the lowest ZoomLevel containing From and To.
 type Map struct {
-	TopLeft, BottomRight maps.LatLon
+	TopLeft, BottomRight tile.LatLon
 	ZoomLevels           []int
 }
 
 // Encode creates a directory with the given Name and writes 2 files to the directory:
 // The index file name.otrk2.xml and the database file OruxMapsImages.db.
 // The image data is retrieved from the TileServer.
-func (m Map) Encode(name string, ts maps.TileServer) error {
+func (m Map) Encode(name string, ts tile.TileServer) error {
 	// Refuse to write a file which is too big.
 	if n, err := m.Count(); err != nil {
 		return err
@@ -63,7 +63,7 @@ func (m Map) Encode(name string, ts maps.TileServer) error {
 
 // sqlitePipe creates the database file by writing commands to the
 // sqlite3 process on wc.
-func (m Map) sqlitePipe(wc io.WriteCloser, ts maps.TileServer) {
+func (m Map) sqlitePipe(wc io.WriteCloser, ts tile.TileServer) {
 	defer wc.Close()
 	wc.Write([]byte(sqlStart))
 	var buf bytes.Buffer
@@ -89,7 +89,7 @@ func (m Map) sqlitePipe(wc io.WriteCloser, ts maps.TileServer) {
 func (m Map) Count() (int64, error) {
 	var sum int64
 	for _, z := range m.ZoomLevels {
-		var tl, br maps.XY
+		var tl, br tile.XY
 		if xy, err := m.TopLeft.XY(z); err != nil {
 			return 0, err
 		} else {
@@ -151,8 +151,8 @@ func (m Map) WriteXML(name string) error {
 
 // expandTileCorners returns the topLeft and bottomRight coordinates of the tile corners
 // for the given zoom level and the number of tiles in x and y direction.
-func (m Map) expandTileCorners(zoom int) (tl maps.LatLon, br maps.LatLon, nx, ny int, err error) {
-	var xy maps.XY
+func (m Map) expandTileCorners(zoom int) (tl tile.LatLon, br tile.LatLon, nx, ny int, err error) {
+	var xy tile.XY
 	if xy, err = m.TopLeft.XY(zoom); err != nil {
 		return tl, br, 0, 0, err
 	} else {

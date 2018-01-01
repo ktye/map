@@ -1,4 +1,4 @@
-# maps
+# track and map
 cartography
 
 Map should become a cartography infrastructure for [go](https://www.golang.org).
@@ -25,5 +25,3 @@ Map should become a cartography infrastructure for [go](https://www.golang.org).
 
 ![](http://www.walter-kuhl.de/grafik_f/mfundeg/01_messpunkt6759.jpg)
 
-# BUGS
-- Go has still too many keywords. The package cannot be called `map`.

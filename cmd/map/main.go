@@ -11,7 +11,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/ktye/maps"
+	"github.com/ktye/maps/tile"
 	"golang.org/x/exp/shiny/driver"
 	"golang.org/x/exp/shiny/screen"
 	"golang.org/x/mobile/event/key"
@@ -30,7 +30,7 @@ var (
 
 var Origin = image.Point{}
 var Zoom int
-var tileServer maps.TileServer
+var tileServer tile.TileServer
 
 func main() {
 	// Process command line arguments.
@@ -44,18 +44,18 @@ func main() {
 	flag.Parse()
 
 	if Zoom < 0 || Zoom > 24 {
-		log.Fatal(maps.ZoomRangeError)
+		log.Fatal(tile.ZoomRangeError)
 	}
 
 	// Start the tile server.
 	if url == "" && local == "" {
-		tileServer = maps.Mandelbrot{}
+		tileServer = tile.Mandelbrot{}
 	} else {
-		tileServer = maps.CombinedTileServer{
-			Points: maps.NewPointTileServer(points, color.RGBA{0,255,0,255}),
-			Cache: maps.NewCacheTileServer(cache),
-			Local: maps.LocalTileServer(local),
-			Http:  maps.HttpTileServer(url),
+		tileServer = tile.CombinedTileServer{
+			Points: tile.NewPointTileServer(points, color.RGBA{0, 255, 0, 255}),
+			Cache:  tile.NewCacheTileServer(cache),
+			Local:  tile.LocalTileServer(local),
+			Http:   tile.HttpTileServer(url),
 		}
 	}
 

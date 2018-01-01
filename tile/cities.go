@@ -1,4 +1,4 @@
-package maps
+package tile
 
 // Cities is a collection of cities and their coordinates,
 // which have a population of more than 1E6 people.
