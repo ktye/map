@@ -48,6 +48,14 @@ type Server interface {
 	Get(z, x, y int) (Tile, error)
 }
 
+// SparseServer may not contain all tiles.
+// Get returns the black tile, if it is not available.
+// Next iterates over all available tiles and returns a nil error, if the tile is valid.
+type SparseServer interface {
+	Get(z, x, y int) (Tile, error)
+	Next() (int, int, int, Tile, error) // z, x, y, tile, error
+}
+
 // HttpServer is a Server which requests tiles from a URL.
 // It's value is the server base URL, e.g: "http://a.tileserver.mymap.com".
 type HttpServer string
@@ -223,6 +231,70 @@ func (p *PointServer) Get(z, x, y int) (Tile, error) {
 		}
 	}
 	return Tile(im), nil
+}
+
+// NewSparserPointServer returns a SparseServer for a list of points and a given zoom level.
+func NewSparsePointServer(z int, points []LatLon) (*SparsePointServer, error) {
+	if z < 0 || z > 24 {
+		return nil, ZoomRangeError
+	}
+	s := SparsePointServer{
+		z:      z,
+		points: make(map[point][]point),
+	}
+	var xy XY
+	var key point
+	var err error
+	for _, ll := range points {
+		xy, err = ll.XY(z)
+		if err != nil {
+			return nil, err
+		}
+		key.x = xy.X
+		key.y = xy.Y
+		pts, ok := s.points[key]
+		pts = append(pts, point{xy.XP, xy.YP})
+		s.points[key] = pts
+		if ok == false {
+			s.keys = append(s.keys, key)
+		}
+	}
+	return &s, nil
+}
+
+// SparsePointServer implements a PointServer as a SparseServer.
+type SparsePointServer struct {
+	z      int
+	points map[point][]point // Keys are the tile indexes {tile.X, tile.Y}, value is a slices of pixel indexes {tile.XP, tile.YP}.
+	keys   []point           // index list for the points map
+	p      int
+}
+
+func (s *SparsePointServer) Get(z, x, y int) (Tile, error) {
+	if z != s.z {
+		return nil, fmt.Errorf("SparsePointServer: Get called with zoom level %d, but only %d is available", z, s.z)
+	}
+	im := image.NewAlpha(image.Rect(0, 0, 256, 256))
+	if points, ok := s.points[point{x, y}]; ok {
+		for _, pt := range points {
+			im.Set(pt.x, pt.y, color.Opaque)
+		}
+	}
+	return im, nil
+}
+
+func (s *SparsePointServer) Next() (z, x, y int, t Tile, err error) {
+	if s.p >= len(s.keys) {
+		return 0, 0, 0, nil, io.EOF
+	}
+	key := s.keys[s.p]
+	s.p++
+	t, err = s.Get(z, x, y)
+	return s.z, key.x, key.y, t, err
+}
+
+type point struct {
+	x, y int
 }
 
 // CombinedServer combines an CachedServer a LocalServer and an HttpServer.
