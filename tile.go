@@ -203,7 +203,7 @@ type PointTileServer struct {
 	coords []LatLon
 }
 
-func NewPointTileServer(file string, c color.Color) (*PointTileServer) {
+func NewPointTileServer(file string, c color.Color) *PointTileServer {
 	var p PointTileServer
 	if c == nil {
 		c = color.Black
@@ -245,9 +245,9 @@ type CombinedTileServer struct {
 	Http   HttpTileServer
 }
 
-// Get returns a tile from the cache, the local filestystem or the net in that order.
+// Get returns a tile from the cache, the local filesystem or the net in that order.
 // It skipps any mode if it is not configured.
-// Any tiles retrieved tiles are also cached in the local and the cache tile server,
+// Any tiles retrieved are also cached in the local and the cache tile server,
 // if these are configured.
 // Get never returns an error, if no tiles are present, it returns a black tile instead.
 func (c CombinedTileServer) Get(z, x, y int) (Tile, error) {
@@ -271,14 +271,14 @@ func (c CombinedTileServer) Get(z, x, y int) (Tile, error) {
 }
 func (c CombinedTileServer) get(z, x, y int) (Tile, error) {
 	x, y = normalizeTile(z, x, y)
-	if c.Cache.m != nil {
+	if c.Cache != nil && c.Cache.m != nil {
 		if t, err := c.Cache.Get(z, x, y); err == nil {
 			return t, nil
 		}
 	}
 	if c.Local != LocalTileServer("") {
 		if t, err := c.Local.Get(z, x, y); err == nil {
-			if c.Cache.m != nil {
+			if c.Cache != nil && c.Cache.m != nil {
 				c.Cache.Add(z, x, y, t)
 			}
 			return t, nil
@@ -289,7 +289,7 @@ func (c CombinedTileServer) get(z, x, y int) (Tile, error) {
 			if c.Local != LocalTileServer("") {
 				c.Local.Add(z, x, y, t)
 			}
-			if c.Cache.m != nil {
+			if c.Cache != nil && c.Cache.m != nil {
 				c.Cache.Add(z, x, y, t)
 			}
 			return t, nil
