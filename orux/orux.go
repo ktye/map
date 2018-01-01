@@ -17,8 +17,6 @@ import (
 	"github.com/ktye/map/tile"
 )
 
-var tileLimit = int64(40) // Encode will complain if this limit is exceeded.
-
 // Map defines the rectangle of the map and the zoom levels to be stored.
 // The rectangle will be extended to the tile boundaries for the lowest ZoomLevel containing From and To.
 type Map struct {
@@ -30,13 +28,6 @@ type Map struct {
 // The index file name.otrk2.xml and the database file OruxMapsImages.db.
 // The image data is retrieved from the Server.
 func (m Map) Encode(name string, ts tile.Server) error {
-	// Refuse to write a file which is too big.
-	if n, err := m.Count(); err != nil {
-		return err
-	} else if n > tileLimit {
-		return fmt.Errorf("requested map is too large: %d tiles (>%d)", n, tileLimit)
-	}
-
 	if err := os.Mkdir(name, 0744); err != nil {
 		return err
 	}
@@ -66,46 +57,39 @@ func (m Map) Encode(name string, ts tile.Server) error {
 func (m Map) sqlitePipe(wc io.WriteCloser, ts tile.Server) {
 	defer wc.Close()
 	wc.Write([]byte(sqlStart))
+
 	var buf bytes.Buffer
-	for _, z := range m.ZoomLevels {
-		tl, _ := m.TopLeft.XY(z)
-		br, _ := m.BottomRight.XY(z)
-		for x := tl.X; x <= br.X; x++ {
-			for y := tl.Y; y <= br.Y; y++ {
-				if tile, err := ts.Get(z, x, y); tile != nil {
-					buf.Reset()
-					png.Encode(&buf, tile)
-					fmt.Fprintf(wc, "INSERT INTO \"tiles\" VALUES(%d,%d,%d,X'%s');", x-tl.X, y-tl.Y, z, hex.EncodeToString(buf.Bytes()))
-				} else {
-					fmt.Println(err)
+	insertTile := func(z, x, y, x0, y0 int, t tile.Tile) {
+		buf.Reset()
+		png.Encode(&buf, t)
+		fmt.Fprintf(wc, "INSERT INTO \"tiles\" VALUES(%d,%d,%d,X'%s');", x-x0, y-y0, z, hex.EncodeToString(buf.Bytes()))
+	}
+
+	if sparse, ok := ts.(tile.SparseServer); ok {
+		for {
+			z, x, y, t, err := sparse.Next()
+			if err != nil {
+				break
+			}
+			tl, _ := m.TopLeft.XY(z)
+			insertTile(z, x, y, tl.X, tl.Y, t)
+		}
+	} else {
+		for _, z := range m.ZoomLevels {
+			tl, _ := m.TopLeft.XY(z)
+			br, _ := m.BottomRight.XY(z)
+			for x := tl.X; x <= br.X; x++ {
+				for y := tl.Y; y <= br.Y; y++ {
+					if t, err := ts.Get(z, x, y); t != nil {
+						insertTile(z, x, y, tl.X, tl.Y, t)
+					} else {
+						fmt.Println(err)
+					}
 				}
 			}
 		}
 	}
 	wc.Write([]byte(sqlEnd))
-}
-
-// Count calculates the number of tiles inside the map.
-func (m Map) Count() (int64, error) {
-	var sum int64
-	for _, z := range m.ZoomLevels {
-		var tl, br tile.XY
-		if xy, err := m.TopLeft.XY(z); err != nil {
-			return 0, err
-		} else {
-			tl = xy
-		}
-		if xy, err := m.BottomRight.XY(z); err != nil {
-			return 0, err
-		} else {
-			br = xy
-		}
-		if br.X < tl.X || br.Y < tl.Y {
-			return 0, fmt.Errorf("wrong definition for top left or buttom right corners")
-		}
-		sum += int64(br.X-tl.X) * int64(br.Y-tl.Y)
-	}
-	return sum, nil
 }
 
 // WriteXML writes the map index to ${name}/${name}.otrk2.xml.
