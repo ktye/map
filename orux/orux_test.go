@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ktye/maps/tile"
+	"github.com/ktye/map/tile"
 )
 
 func TestOrux(t *testing.T) {

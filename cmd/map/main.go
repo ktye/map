@@ -11,7 +11,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/ktye/maps/tile"
+	"github.com/ktye/map/tile"
 	"golang.org/x/exp/shiny/driver"
 	"golang.org/x/exp/shiny/screen"
 	"golang.org/x/mobile/event/key"

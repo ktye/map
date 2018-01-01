@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/ktye/maps/tile"
+	"github.com/ktye/map/tile"
 )
 
 var tileLimit = int64(40) // Encode will complain if this limit is exceeded.
