@@ -1,65 +1,98 @@
-// World creates a map for OruxMaps with points from a list.
+// World draws pixels from GPS coordinates to tiles.
 package main
 
 import (
 	"flag"
 	"fmt"
+	"image"
+	"image/color"
 	"log"
-	"os"
+	"strconv"
 
-	"github.com/ktye/map/orux"
 	"github.com/ktye/map/tile"
 )
 
-// TODO: it does not work: no output
-// TODO: cache tiles on the file system with the ability to update these for a short list of new points.
-// TODO: multiple zoom levels, tile.SparsePointServer needs to be modified for orux.Encode
-
-type world struct {
-	Name   string
-	Zoom   int
-	File   string
-	points []tile.LatLon
-}
-
 func main() {
 	var w world
-	flag.StringVar(&w.Name, "name", "MyWorld", "directory name for output orux map")
-	flag.IntVar(&w.Zoom, "zoom", 2, "zoom level")
-	flag.StringVar(&w.File, "file", "points.txt", "lat-lon list of coordinates")
+
+	var ts, color string
+	flag.StringVar(&ts, "tiles", "tiles", "directory for local tile server")
+	flag.IntVar(&w.Zoom, "zoom", 11, "zoom level")
+	flag.StringVar(&color, "color", "#FF0000", "color #RRGGBB")
 	flag.Parse()
 
-	w.read()
+	w.Server = tile.LocalServer(ts)
+	w.Color = parseColor(color)
 
-	var ts tile.Server
-	if s, err := tile.NewSparsePointServer(w.Zoom, w.points); err != nil {
-		log.Fatal(err)
-	} else {
-		ts = s
-	}
-
-	m := orux.Map{
-		TopLeft:     tile.LatLon{tile.MaxLatitude, -180},
-		BottomRight: tile.LatLon{tile.MinLatitude(w.Zoom), 180},
-		ZoomLevels:  []int{w.Zoom},
-	}
-	if err := m.Encode(w.Name, ts); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func (w *world) read() {
-	if f, err := os.Open(w.File); err != nil {
-		log.Fatal(err)
-	} else {
-		defer f.Close()
-		var lat, lon float64
-		for {
-			if n, err := fmt.Fscanf(f, "%f %f\n", &lat, &lon); n == 2 && err == nil {
-				w.points = append(w.points, tile.LatLon{tile.Degree(lat), tile.Degree(lon)})
+	var lat, lon float64
+	for {
+		if n, err := fmt.Scanf("%f %f\n", &lat, &lon); n == 2 && err == nil {
+			ll := tile.LatLon{tile.Degree(lat), tile.Degree(lon)}
+			if xy, err := ll.XY(w.Zoom); err != nil {
+				log.Fatal(err)
 			} else {
-				break
+				if err := w.addPoint(xy); err != nil {
+					log.Fatal(err)
+				}
 			}
+		} else {
+			break
 		}
 	}
+	w.flush()
+}
+
+func parseColor(s string) color.RGBA {
+	errmsg := "wrong color format, expecting #RRGGBBAA"
+	if len(s) != 7 || s[0] != '#' {
+		log.Fatal(errmsg)
+	}
+	s = s[1:]
+	var v [3]uint8
+	for i := 0; i < 3; i++ {
+		if n, err := strconv.ParseUint(s[2*i:2*i+2], 16, 8); err != nil {
+			log.Fatal(errmsg)
+		} else {
+			v[i] = uint8(n)
+		}
+	}
+	return color.RGBA{R: v[0], G: v[1], B: v[2], A: 255}
+}
+
+type world struct {
+	Points  string
+	Zoom    int
+	Color   color.Color
+	Server  tile.LocalServer
+	x, y    int
+	current tile.Tile
+}
+
+func (w *world) addPoint(xy tile.XY) error {
+	if xy.X != w.x || xy.Y != w.y {
+		if w.current != nil {
+			if err := w.Server.Add(w.Zoom, w.x, w.y, w.current); err != nil {
+				return err
+			}
+		}
+		if t, err := w.Server.Get(w.Zoom, xy.X, xy.Y); err != nil {
+			im := image.NewRGBA(image.Rect(0, 0, 256, 256))
+			w.current = im
+		} else {
+			w.current = t
+		}
+		w.x = xy.X
+		w.y = xy.Y
+	}
+	w.current.Set(xy.XP, xy.YP, w.Color)
+	return nil
+}
+
+func (w world) flush() error {
+	if w.current != nil {
+		if err := w.Server.Add(w.Zoom, w.x, w.y, w.current); err != nil {
+			return err
+		}
+	}
+	return nil
 }
