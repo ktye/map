@@ -34,7 +34,7 @@ import (
 // Reference:
 // https://wiki.openstreetmap.org/wiki/Tiles
 // https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
-type Tile image.Image
+type Tile draw.Image
 
 // Server can return a Tile.
 //
@@ -129,7 +129,7 @@ func decodePngTile(r io.Reader) (Tile, error) {
 		if img.Bounds().Dx() != 256 || img.Bounds().Dy() != 256 {
 			return nil, errors.New("png tile size is not 256x256")
 		}
-		return Tile(img), nil
+		return Tile(img.(draw.Image)), nil
 	}
 }
 
@@ -319,15 +319,14 @@ func (c CombinedServer) Get(z, x, y int) (Tile, error) {
 		return t, nil
 	}
 
-	im := t.(draw.Image)
 	for _, coords := range c.Points.coords {
 		if xy, err := coords.XY(z); err == nil {
 			if xy.X == x && xy.Y == y {
-				im.Set(xy.XP, xy.YP, c.Points.Color)
+				t.Set(xy.XP, xy.YP, c.Points.Color)
 			}
 		}
 	}
-	return Tile(im), nil
+	return t, nil
 }
 func (c CombinedServer) get(z, x, y int) (Tile, error) {
 	x, y = normalizeTile(z, x, y)
