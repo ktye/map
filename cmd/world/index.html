@@ -1,0 +1,28 @@
+<html>
+<head>
+<link rel="stylesheet" href="leaflet.css" />
+<script src="leaflet.js"></script>
+<style>
+body{ padding: 0; margin: 0; }
+html, body, #map { height: 100%; width: 100vw; }
+#map { background-color: white; }
+</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+</head>
+<body>
+<div id="map">
+</div>
+<script>
+
+var map = L.map('map').setView([49.87202, 8.64782], 12);
+L.tileLayer('{z}/{x}/{y}.png', {}).addTo(map);
+map.locate({setView: true, watch: true, maxZoom: 15})
+var marker = L.marker([49.87202, 8.64782]).addTo(map)
+function onLocationFound(e) {
+	marker.setLatLng(e.latlng);
+}
+map.on('locationfound', onLocationFound);
+
+</script>
+</body>
+</html>
