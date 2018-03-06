@@ -16,13 +16,16 @@ func main() {
 	var w world
 
 	var ts, color string
+	var update bool
 	flag.StringVar(&ts, "tiles", "tiles", "directory for local tile server")
 	flag.IntVar(&w.Zoom, "zoom", 11, "zoom level")
 	flag.StringVar(&color, "color", "#FF0000", "color #RRGGBB")
+	flag.BoolVar(&update, "update", false, "print a list with updated tiles")
 	flag.Parse()
 
 	w.Server = tile.LocalServer(ts)
 	w.Color = parseColor(color)
+	updatedTiles := make(map[string]bool)
 
 	var lat, lon float64
 	for {
@@ -34,12 +37,21 @@ func main() {
 				if err := w.addPoint(xy); err != nil {
 					log.Fatal(err)
 				}
+				if update {
+					updatedTiles[fmt.Sprintf("%d/%d/%d.png", xy.Z, xy.X, xy.Y)] = true
+				}
 			}
 		} else {
 			break
 		}
 	}
 	w.flush()
+
+	if update {
+		for s := range updatedTiles {
+			fmt.Println(s)
+		}
+	}
 }
 
 func parseColor(s string) color.RGBA {
