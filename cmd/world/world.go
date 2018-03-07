@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"log"
+	"math"
 	"strconv"
 
 	"github.com/ktye/map/tile"
@@ -30,6 +31,9 @@ func main() {
 	var lat, lon float64
 	for {
 		if n, err := fmt.Scanf("%f %f\n", &lat, &lon); n == 2 && err == nil {
+			if math.IsNaN(lat) || math.IsNaN(lon) {
+				continue
+			}
 			ll := tile.LatLon{tile.Degree(lat), tile.Degree(lon)}
 			if xy, err := ll.XY(w.Zoom); err != nil {
 				log.Fatal(err)
